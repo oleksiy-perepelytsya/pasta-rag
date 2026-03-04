@@ -50,6 +50,7 @@ class LLMClient:
         self,
         model: str,
         messages: list[dict],
+        max_output_tokens: 800,
         system_prompt: Optional[str] = None,
     ) -> str:
         full_prompt = _build_gemini_prompt(messages, system_prompt)
