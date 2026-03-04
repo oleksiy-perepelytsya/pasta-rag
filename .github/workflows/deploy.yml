@@ -68,10 +68,12 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           command_timeout: 30m
           script: |
-            cd ${{ secrets.DEPLOY_PATH }}
+            set -e
+
+            DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
 
             # Pull latest code (picks up docker-compose.yml changes)
-            git pull origin master
+            git -C "$DEPLOY_PATH" pull origin master
 
             # Login to GitHub Container Registry
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -79,11 +81,11 @@ jobs:
             # Pull the pre-built image
             docker pull ghcr.io/${{ github.repository }}:latest
 
-            # Recreate containers with the new image
-            docker compose up -d --force-recreate
+            # Recreate containers with the new image (explicit file path)
+            docker compose -f "$DEPLOY_PATH/docker-compose.yml" up -d --force-recreate
 
             # Remove dangling images
             docker image prune -af
 
             # Show running containers
-            docker compose ps
+            docker compose -f "$DEPLOY_PATH/docker-compose.yml" ps
