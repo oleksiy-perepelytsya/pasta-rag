@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: pasta-rag-bot
+    env_file: .env
+    depends_on:
+      - mongodb
+      - chromadb
+    restart: unless-stopped
+    # Wait for dependencies to be ready before starting
+    command: sh -c "sleep 8 && python -m bot.main"
+
+  mongodb:
+    image: mongo:7
+    container_name: pasta-rag-mongodb
+    volumes:
+      - mongodb_data:/data/db
+    command: mongod --bind_ip_all --wiredTigerCacheSizeGB 0.25
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: pasta-rag-chromadb
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  chroma_data:
