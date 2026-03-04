@@ -6,11 +6,12 @@ services:
     container_name: pasta-rag-bot
     env_file: .env
     depends_on:
-      - mongodb
-      - chromadb
+      mongodb:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
     restart: unless-stopped
-    # Wait for dependencies to be ready before starting
-    command: sh -c "sleep 8 && python -m bot.main"
+    command: python -m bot.main
 
   mongodb:
     image: mongo:7
@@ -19,6 +20,12 @@ services:
       - mongodb_data:/data/db
     command: mongod --bind_ip_all --wiredTigerCacheSizeGB 0.25
     restart: unless-stopped
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   chromadb:
     image: chromadb/chroma:latest
@@ -29,6 +36,12 @@ services:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   mongodb_data:
