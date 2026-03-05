@@ -198,10 +198,11 @@ class AdminHandlers:
     async def handle_upload_document(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        if context.user_data.get("state") != UPLOAD_STATE:
-            return
-        if not await self._require_admin(update):
-            return
+        # Admins can drop files at any time without needing /upload first
+        user = await self.mongo.get_user(update.effective_user.id)
+        if not user or not user.is_admin:
+            return  # silently ignore files from non-admins
+
 
         doc = update.message.document
         await update.message.reply_text(f"⏳ Processing `{doc.file_name}`…", parse_mode="Markdown")

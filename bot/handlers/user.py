@@ -92,12 +92,14 @@ class UserHandlers:
         await self.mongo.save_message(asst_msg)
         await self.session_mgr.touch_session(session)
 
-        # Send reply (Telegram limit: 4096 chars)
-        if len(reply) <= 4096:
-            await update.message.reply_text(reply)
-        else:
-            for i in range(0, len(reply), 4096):
-                await update.message.reply_text(reply[i:i + 4096])
+        # Send reply (Telegram limit: 4096 chars per message)
+        chunks = [reply[i:i + 4096] for i in range(0, len(reply), 4096)]
+        for chunk in chunks:
+            try:
+                await update.message.reply_text(chunk, parse_mode="Markdown")
+            except Exception:
+                # Fallback to plain text if Markdown parsing fails
+                await update.message.reply_text(chunk)
 
     async def _register_user(self, tg_user) -> User:
         count = await self.mongo.count_users()
