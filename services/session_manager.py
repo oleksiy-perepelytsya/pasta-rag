@@ -3,12 +3,36 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
+import httpx
+
 from config import settings
 from models.schemas import Message, Session
 from storage.chroma import ChromaStore
 from storage.mongo import MongoStore
 
 logger = logging.getLogger(__name__)
+
+# Simple in-process cache: {url: content} — cleared on bot restart
+_prompt_cache: dict[str, str] = {}
+
+
+async def _resolve_prompt(value: str) -> str:
+    """If value is a URL, fetch and return its text content; otherwise return as-is."""
+    if not value.startswith(("http://", "https://")):
+        return value
+    if value in _prompt_cache:
+        return _prompt_cache[value]
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(value)
+            resp.raise_for_status()
+            content = resp.text
+            _prompt_cache[value] = content
+            logger.info(f"Fetched system prompt from URL ({len(content)} chars): {value}")
+            return content
+    except Exception as e:
+        logger.error(f"Failed to fetch system prompt URL {value}: {e}")
+        return value  # fall back to raw URL so the bot keeps running
 
 
 def _format_rag_block(past_sessions: list[dict], kb_hits: list[dict]) -> str:
@@ -56,11 +80,9 @@ class SessionManager:
         Returns (system_prompt_with_rag, current_session_messages_list).
         The caller should append the current user message before calling LLM.
         """
-        # 1. System prompt from DB
-        system_prompt = (
-            await self.mongo.get_config("system_prompt")
-            or "You are a helpful assistant."
-        )
+        # 1. System prompt from DB (may be plain text or a URL to fetch)
+        raw_prompt = await self.mongo.get_config("system_prompt") or "You are a helpful assistant."
+        system_prompt = await _resolve_prompt(raw_prompt)
 
         # 2. RAG: past sessions (per-user ChromaDB namespace)
         past_sessions = await self.chroma.query_sessions(
