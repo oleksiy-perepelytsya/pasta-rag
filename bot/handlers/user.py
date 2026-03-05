@@ -1,8 +1,28 @@
 import logging
+import re
 from datetime import datetime
 
 from telegram import Update
 from telegram.ext import ContextTypes
+
+
+def _md_to_html(text: str) -> str:
+    """Convert common LLM markdown output to Telegram-safe HTML."""
+    # Escape existing HTML special chars first
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # Code blocks (``` ... ```) — must come before inline code
+    text = re.sub(r"```(?:\w+)?\n?(.*?)```", r"<pre>\1</pre>", text, flags=re.DOTALL)
+    # Inline code
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    # Bold: **text** or __text__
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
+    # Italic: *text* or _text_
+    text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
+    text = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", text)
+    # Headers → bold
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"<b>\1</b>", text, flags=re.MULTILINE)
+    return text
 
 from config import settings
 from models.schemas import Message, User
@@ -68,13 +88,15 @@ class UserHandlers:
         )
         messages.append({"role": "user", "content": text})
 
-        # Determine model
+        # Determine model and token limit
         model = await self.mongo.get_config("llm_model") or settings.default_llm_model
+        max_tokens_cfg = await self.mongo.get_config("max_output_tokens")
+        max_output_tokens = int(max_tokens_cfg) if max_tokens_cfg else 800
 
         # Call LLM
         await update.message.chat.send_action("typing")
         try:
-            reply = await self.llm.call_model(model, messages, system_prompt)
+            reply = await self.llm.call_model(model, messages, system_prompt, max_output_tokens)
         except Exception as e:
             logger.error(f"LLM call failed: {e}", exc_info=True)
             await update.message.reply_text(
@@ -92,13 +114,13 @@ class UserHandlers:
         await self.mongo.save_message(asst_msg)
         await self.session_mgr.touch_session(session)
 
-        # Send reply (Telegram limit: 4096 chars per message)
-        chunks = [reply[i:i + 4096] for i in range(0, len(reply), 4096)]
+        # Convert markdown to Telegram HTML then send
+        html = _md_to_html(reply)
+        chunks = [html[i:i + 4096] for i in range(0, len(html), 4096)]
         for chunk in chunks:
             try:
-                await update.message.reply_text(chunk, parse_mode="Markdown")
+                await update.message.reply_text(chunk, parse_mode="HTML")
             except Exception:
-                # Fallback to plain text if Markdown parsing fails
                 await update.message.reply_text(chunk)
 
     async def _register_user(self, tg_user) -> User:

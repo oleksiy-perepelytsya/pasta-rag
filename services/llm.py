@@ -50,15 +50,20 @@ class LLMClient:
         self,
         model: str,
         messages: list[dict],
-        max_output_tokens: 800,
         system_prompt: Optional[str] = None,
+        max_output_tokens: int = 800,
     ) -> str:
         full_prompt = _build_gemini_prompt(messages, system_prompt)
         loop = asyncio.get_running_loop()
 
         def _sync() -> str:
             m = self._get_gemini_model(model)
-            resp = m.generate_content(full_prompt)
+            resp = m.generate_content(
+                full_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=max_output_tokens,
+                ),
+            )
             return resp.text
 
         return await loop.run_in_executor(None, _sync)
@@ -68,6 +73,7 @@ class LLMClient:
         model: str,
         messages: list[dict],
         system_prompt: Optional[str] = None,
+        max_output_tokens: int = 800,
     ) -> str:
         if not self._anthropic:
             raise ValueError("Anthropic API key not configured")
@@ -76,7 +82,7 @@ class LLMClient:
         def _sync() -> str:
             params: dict = {
                 "model": model,
-                "max_tokens": 4096,
+                "max_tokens": max_output_tokens,
                 "messages": messages,
             }
             if system_prompt:
@@ -91,6 +97,7 @@ class LLMClient:
         model: str,
         messages: list[dict],
         system_prompt: Optional[str] = None,
+        max_output_tokens: int = 800,
     ) -> str:
         if not self._openai:
             raise ValueError("OpenAI API key not configured")
@@ -101,7 +108,7 @@ class LLMClient:
         resp = await self._openai.chat.completions.create(
             model=model,
             messages=all_messages,
-            max_tokens=4096,
+            max_tokens=max_output_tokens,
         )
         return resp.choices[0].message.content
 
@@ -110,14 +117,15 @@ class LLMClient:
         model: str,
         messages: list[dict],
         system_prompt: Optional[str] = None,
+        max_output_tokens: int = 800,
     ) -> str:
-        logger.info(f"LLM call: model={model}, messages={len(messages)}")
+        logger.info(f"LLM call: model={model}, messages={len(messages)}, max_tokens={max_output_tokens}")
         if model.startswith("gemini-") or model.startswith("models/gemini"):
-            return await self.call_gemini(model, messages, system_prompt)
+            return await self.call_gemini(model, messages, system_prompt, max_output_tokens)
         elif model.startswith("claude-"):
-            return await self.call_claude(model, messages, system_prompt)
+            return await self.call_claude(model, messages, system_prompt, max_output_tokens)
         elif model.startswith(("gpt-", "o1", "o3", "o4")):
-            return await self.call_openai(model, messages, system_prompt)
+            return await self.call_openai(model, messages, system_prompt, max_output_tokens)
         else:
             logger.warning(f"Unknown model prefix '{model}', defaulting to Gemini")
-            return await self.call_gemini(model, messages, system_prompt)
+            return await self.call_gemini(model, messages, system_prompt, max_output_tokens)

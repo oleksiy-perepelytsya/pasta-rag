@@ -180,6 +180,24 @@ class AdminHandlers:
         else:
             await update.message.reply_text("❌ User not found in database.")
 
+    async def cmd_settokens(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._require_admin(update):
+            return
+        if context.args:
+            try:
+                tokens = int(context.args[0])
+            except ValueError:
+                await update.message.reply_text("Usage: /settokens <number> (e.g. /settokens 1200)")
+                return
+            await self.mongo.set_config("max_output_tokens", str(tokens), update.effective_user.id)
+            await update.message.reply_text(f"✅ Max output tokens set to `{tokens}`", parse_mode="Markdown")
+        else:
+            current = await self.mongo.get_config("max_output_tokens") or "800"
+            await update.message.reply_text(
+                f"Current max output tokens: `{current}`\n\nUsage: /settokens <number>",
+                parse_mode="Markdown",
+            )
+
     async def cmd_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._require_admin(update):
             return

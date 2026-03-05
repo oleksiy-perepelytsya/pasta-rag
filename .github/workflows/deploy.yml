@@ -81,8 +81,8 @@ jobs:
             # Pull the pre-built image
             docker pull ghcr.io/${{ github.repository }}:latest
 
-            # Recreate containers with the new image (explicit file path)
-            docker compose -f "$DEPLOY_PATH/docker-compose.yml" up -d --force-recreate
+            # Rebuild image from updated source and recreate containers
+            docker compose -f "$DEPLOY_PATH/docker-compose.yml" up -d --build --force-recreate
 
             # Remove dangling images
             docker image prune -af
