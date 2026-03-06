@@ -75,6 +75,8 @@ async def main() -> None:
     app.add_handler(CommandHandler("upload", admin_h.cmd_upload))
     app.add_handler(CommandHandler("settokens", admin_h.cmd_settokens))
     app.add_handler(CommandHandler("promote", admin_h.cmd_promote))
+    app.add_handler(CommandHandler("userslist", admin_h.cmd_userslist))
+    app.add_handler(CommandHandler("userhistory", admin_h.cmd_userhistory))
 
     # group=0: upload/state handlers — run first for every message
     app.add_handler(

@@ -177,6 +177,18 @@ class MongoStore:
     async def count_messages(self) -> int:
         return await self.messages.count_documents({})
 
+    async def get_user_messages(self, telegram_id: int, limit: int = 200) -> list[Message]:
+        cursor = (
+            self.messages.find({"telegram_id": telegram_id})
+            .sort("created_at", ASCENDING)
+            .limit(limit)
+        )
+        msgs = []
+        async for doc in cursor:
+            doc.pop("_id", None)
+            msgs.append(Message(**doc))
+        return msgs
+
     async def search_messages(self, query: str, limit: int = 5) -> list[Message]:
         cursor = self.messages.find(
             {"$text": {"$search": query}},
