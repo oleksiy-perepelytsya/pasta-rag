@@ -218,35 +218,37 @@ class AdminHandlers:
             await update.message.reply_text("❌ User not found.")
             return
 
-        messages = await self.mongo.get_user_messages(target_id, limit=200)
+        messages = await self.mongo.get_user_messages(target_id, limit=10000)
         if not messages:
             await update.message.reply_text("No messages found for this user.")
             return
 
         username = f"@{user.username}" if user.username else "no username"
-        header = f"💬 <b>History for {user.first_name} ({username}) [{target_id}]</b>\n\n"
 
-        lines = []
+        lines = [
+            f"Chat history for {user.first_name} ({username}) [ID: {target_id}]",
+            f"Total messages: {len(messages)}",
+            "=" * 60,
+        ]
         current_session = None
         for msg in messages:
             if msg.session_id != current_session:
                 current_session = msg.session_id
-                lines.append(f"\n<b>── Session {msg.session_id[:8]}… ──</b>")
-            ts = msg.created_at.strftime("%H:%M")
-            role_icon = "👤" if msg.role == "user" else "🤖"
-            # Escape HTML and truncate long messages
-            content = msg.content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            if len(content) > 300:
-                content = content[:300] + "…"
-            lines.append(f"[{ts}] {role_icon} {content}")
+                lines.append(f"\n── Session {msg.session_id} ──\n")
+            ts = msg.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            role = "USER     " if msg.role == "user" else "ASSISTANT"
+            lines.append(f"[{ts}] {role}: {msg.content}")
 
-        body = "\n".join(lines)
-        full = header + body
+        import io
+        content = "\n".join(lines)
+        file = io.BytesIO(content.encode("utf-8"))
+        file.name = f"history_{target_id}.txt"
 
-        # Split into chunks staying within Telegram's 4096 limit
-        chunks = [full[i:i + 4000] for i in range(0, len(full), 4000)]
-        for chunk in chunks:
-            await update.message.reply_text(chunk, parse_mode="HTML")
+        await update.message.reply_document(
+            document=file,
+            filename=f"history_{target_id}.txt",
+            caption=f"💬 {user.first_name} ({username}) — {len(messages)} messages",
+        )
 
     async def cmd_settokens(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._require_admin(update):
